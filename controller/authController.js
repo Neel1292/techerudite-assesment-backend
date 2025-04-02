@@ -74,7 +74,7 @@ async function handleLoginUser(req, res) {
 
         // Check if user role matches
         if(user[0].role !== role) {
-            return res.status(STATUS.UNAUTHORIZED).json({ message: "Please contact admin!" });
+            return res.status(STATUS.UNAUTHORIZED).json({ message: "You are not allowed to login from here" });
         }
 
         const [auth] = await db.query("SELECT * FROM auth WHERE user_sid = ?", [user[0].user_sid]);

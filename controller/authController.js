@@ -18,7 +18,7 @@ async function handleCreateNewUser(req, res) {
 
         // Check if email already exists
         const [existingUser] = await db.query("SELECT id FROM users WHERE email = ?", [email]);
-        
+
         if (existingUser.length > 0) {
             return res.status(STATUS.BAD_REQUEST).json({ message: "Email already exists" });
         }
@@ -49,13 +49,56 @@ async function handleCreateNewUser(req, res) {
         // Send verification email
         await sendVerificationEmail(email, otp);
 
-        return res.status(STATUS.CREATED).json({ message: 'User Created', userId: uuid });
+        const user = result.map(({ password, id, created_at, updated_at, ...rest }) => rest);
+
+        return res.status(STATUS.CREATED).json({ message: 'User Created Successfully', data: user });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
+}
 
+async function handleLoginUser(req, res) {
+    const { email, role, password } = req.body;
+
+    try {
+        if (!email || !password || !role) {
+            return res.status(STATUS.BAD_REQUEST).json({ message: "All fields are required" });
+        }
+
+        // Check if user exists
+        const [user] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
+
+        if (user.length === 0) {
+            return res.status(STATUS.NOT_FOUND).json({ message: "Email/Password does not match!" });
+        }
+
+        // Check if user role matches
+        if(user[0].role !== role) {
+            return res.status(STATUS.UNAUTHORIZED).json({ message: "Please contact admin!" });
+        }
+
+        const [auth] = await db.query("SELECT * FROM auth WHERE user_sid = ?", [user[0].user_sid]);
+
+        // Check if user is verified
+        if(!auth[0].verified_email) {
+            return res.status(STATUS.UNAUTHORIZED).json({ message: "Please verify your email" });
+        }
+
+        // Check password
+        const isMatch = await bcrypt.compare(password, user[0].password);
+
+        if (!isMatch) {
+            return res.status(STATUS.UNAUTHORIZED).json({ message: "Email/Password does not match!" });
+        }
+
+        const result = user.map(({ password, id, created_at, updated_at, ...rest }) => rest);
+        return res.status(STATUS.OK).json({ message: "Login successful", data: result });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
 }
 
 module.exports = {
     handleCreateNewUser,
+    handleLoginUser,
 }

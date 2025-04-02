@@ -74,7 +74,7 @@ async function handleLoginUser(req, res) {
 
         // Check if user role matches
         if(user[0].role !== role) {
-            return res.status(STATUS.UNAUTHORIZED).json({ message: "Please contact admin!" });
+            return res.status(STATUS.UNAUTHORIZED).json({ message: "You are not allowed to login from here" });
         }
 
         const [auth] = await db.query("SELECT * FROM auth WHERE user_sid = ?", [user[0].user_sid]);
@@ -98,7 +98,40 @@ async function handleLoginUser(req, res) {
     }
 }
 
+async function handleVerifyUser(req, res) {
+    const { email, otp } = req.body;
+
+    try {
+        if (!email || !otp) {
+            return res.status(STATUS.BAD_REQUEST).json({ message: "All fields are required" });
+        }
+
+        // Check if user exists
+        const [user] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
+
+        if (user.length === 0) {
+            return res.status(STATUS.NOT_FOUND).json({ message: "Email not found" });
+        }
+
+        // Check if OTP matches
+        const [auth] = await db.query("SELECT * FROM auth WHERE user_sid = ?", [user[0].user_sid]);
+
+        if (auth.length === 0 || auth[0].otp !== otp) {
+            return res.status(STATUS.BAD_REQUEST).json({ message: "Invalid OTP" });
+        }
+
+        // Update verified_email to true
+        const sql = `UPDATE auth SET verified_email = ? WHERE user_sid = ?`;
+        await db.query(sql, [true, user[0].user_sid]);
+
+        return res.status(STATUS.OK).json({ message: "Email verified successfully" });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+}
+
 module.exports = {
     handleCreateNewUser,
     handleLoginUser,
+    handleVerifyUser
 }

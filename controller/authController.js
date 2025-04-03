@@ -3,13 +3,13 @@ const bcrypt = require("bcrypt");
 const db = require("../config/connectDB");
 const otpGenerator = require('otp-generator')
 
-const { generateUUID } = require("../config/generateUUID");
+const { generateUUID, generateToken } = require("../config/generateUUID");
 const { sendVerificationEmail } = require("../config/sendMail");
 require("dotenv").config();
 
 async function handleCreateNewUser(req, res) {
-    const { first_name, last_name, gender, email, role, password } = req.body;
-    const user_role = role ? role: "user";
+    const { first_name, last_name, gender, email, role, password, confirm_password } = req.body;
+    const user_role = role ? role: "customer";
     try {
 
         if(!first_name || !last_name || !gender || !email || !password) {
@@ -23,8 +23,13 @@ async function handleCreateNewUser(req, res) {
             return res.status(STATUS.BAD_REQUEST).json({ message: "Email already exists" });
         }
 
+        if(password !== confirm_password) {
+            return res.status(STATUS.BAD_REQUEST).json({ message: "Password does not match" });
+        }
+
         // Create a UUID and Hash the password
         const uuid = await generateUUID(user_role);
+        const token = await generateToken();
         const saltRounds = parseInt(process.env.SALT_ROUNDS, 10) || 10;
         const salt = await bcrypt.genSalt(saltRounds);
         const hash = await bcrypt.hash(password, salt)
@@ -41,17 +46,19 @@ async function handleCreateNewUser(req, res) {
             return res.status(STATUS.BAD_REQUEST).json({ error: 'User not found' });
         }
 
+        const getUserSQL = `SELECT user_sid, first_name, last_name, email, gender, role FROM users WHERE user_sid = ?`;
+        const [userData] = await db.query(getUserSQL, [uuid]);
+
         // Generate OTP and insert into auth table
-        const otp = otpGenerator.generate(6, { upperCaseAlphabets: false, specialChars: false });
-        const sqlAuth = `INSERT INTO auth (user_sid, otp) VALUES (?, ?)`;
-        await db.query(sqlAuth, [uuid, otp]);
+        const otp = await otpGenerator.generate(6, { upperCaseAlphabets: false, specialChars: false });
+        const sqlAuth = `INSERT INTO auth (user_sid, otp, token) VALUES (?, ?, ?)`;
+        await db.query(sqlAuth, [uuid, otp, token]);
 
         // Send verification email
-        await sendVerificationEmail(email, otp);
+        await sendVerificationEmail(email, otp, token);
+        userData[0].token = token;
 
-        const user = result.map(({ password, id, created_at, updated_at, ...rest }) => rest);
-
-        return res.status(STATUS.CREATED).json({ message: 'User Created Successfully', data: user });
+        return res.status(STATUS.CREATED).json({ message: 'User Created Successfully', data: userData[0] });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -99,32 +106,56 @@ async function handleLoginUser(req, res) {
 }
 
 async function handleVerifyUser(req, res) {
-    const { email, otp } = req.body;
+    const { otp } = req.body;
+    const { token } = req.query
 
     try {
-        if (!email || !otp) {
+        if (!token) {
+            return res.status(STATUS.BAD_REQUEST).json({ message: "Link is expired" });
+        }
+        if (!otp) {
             return res.status(STATUS.BAD_REQUEST).json({ message: "All fields are required" });
         }
 
-        // Check if user exists
-        const [user] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
-
-        if (user.length === 0) {
-            return res.status(STATUS.NOT_FOUND).json({ message: "Email not found" });
-        }
-
         // Check if OTP matches
-        const [auth] = await db.query("SELECT * FROM auth WHERE user_sid = ?", [user[0].user_sid]);
+        const [auth] = await db.query("SELECT * FROM auth WHERE token = ? AND verified_at IS NULL", [token]);
 
-        if (auth.length === 0 || auth[0].otp !== otp) {
-            return res.status(STATUS.BAD_REQUEST).json({ message: "Invalid OTP" });
+        if (auth.length === 0) {
+            return res.status(STATUS.BAD_REQUEST).json({ message: "Please try again!" });
         }
+
+        if (auth[0].otp !== otp) {
+            return res.status(STATUS.BAD_REQUEST).json({ message: "Invalid Otp" });
+        }
+
+        const date = new Date().toISOString().slice(0, 19).replace("T", " ")
 
         // Update verified_email to true
-        const sql = `UPDATE auth SET verified_email = ? WHERE user_sid = ?`;
-        await db.query(sql, [true, user[0].user_sid]);
+        const sql = `UPDATE auth SET verified_email = ?, verified_at = ? WHERE token = ?`;
+        await db.query(sql, [true, date, token]);
 
-        return res.status(STATUS.OK).json({ message: "Email verified successfully" });
+        return res.status(STATUS.NO_CONTENT).json({ message: "Email verified successfully" });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+}
+
+async function handleVerifyToken(req, res) {
+    const { token } = req.query
+
+    try {
+        if (!token) {
+            return res.status(STATUS.BAD_REQUEST).json({ message: "Link is not valid" });
+        }
+
+        // Check if token exists
+        const [auth] = await db.query("SELECT user_sid FROM auth WHERE token = ? AND verified_at IS NULL", [token]);
+
+        if (auth.length === 0) {
+            return res.status(STATUS.BAD_REQUEST).json({ message: "Email Already verified!" });
+        }
+
+        return res.status(STATUS.NO_CONTENT).json({ message: "Token is valid" });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -133,5 +164,6 @@ async function handleVerifyUser(req, res) {
 module.exports = {
     handleCreateNewUser,
     handleLoginUser,
-    handleVerifyUser
+    handleVerifyUser,
+    handleVerifyToken
 }

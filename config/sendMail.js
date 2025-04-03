@@ -15,8 +15,12 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-const sendVerificationEmail = async (email, code) => {
-    emailTemplate = emailTemplate.replace("123456", code);
+const sendVerificationEmail = async (email, code, verifyUrl) => {
+    let emailTemplate = fs.readFileSync(path.join(__dirname, "../template/email_template.html"), "utf8");
+      
+    emailTemplate = emailTemplate
+      .replace(/"123456"/g, code) 
+      .replace("{{VERIFY_URL}}", `http://localhost:5173/verify?token=${verifyUrl}`);;
 
     await transporter.sendMail({
       from: process.env.FROM_MAIL,

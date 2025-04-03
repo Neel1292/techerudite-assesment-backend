@@ -7,7 +7,8 @@ let emailTemplate = fs.readFileSync(path.join(__dirname, "../template/email_temp
 
 // Email Transporter
 const transporter = nodemailer.createTransport({
-    host: "sandbox.smtp.mailtrap.io",
+    host: process.env.EMAIL_HOST,
+    service: "gmail",
     port: parseInt(process.env.EMAIL_PORT || 2525),
     auth: {
       user: process.env.EMAIL_USER,

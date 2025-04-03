@@ -1,4 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4, v6: uuidv6 } = require('uuid');
 
 async function generateUUID(role) {
     const uuid = uuidv4().toUpperCase();
@@ -7,6 +7,12 @@ async function generateUUID(role) {
     return user_uuid;
 }
 
+async function generateToken() {
+    const token = uuidv6();
+    return token;
+}
+
 module.exports = {
     generateUUID,
+    generateToken,
 }

@@ -34,6 +34,16 @@
             margin: 10px 0;
             border-radius: 5px;
         }
+        .verify-button {
+            display: block;
+            padding: 10px 15px;
+            margin-top: 20px;
+            font-size: 16px;
+            color: #ffffff;
+            background-color: #007bff;
+            text-decoration: none;
+            border-radius: 5px;
+        }
         .footer {
             margin-top: 20px;
             font-size: 12px;
@@ -45,7 +55,8 @@
     <div class="container">
         <h2 class="success">🎉 Registration Successful!</h2>
         <p>Thank you for signing up. Please use the following OTP to verify your email:</p>
-        <div class="otp">123456</div>
+        <div class="otp">"123456"</div>
+        <a href="{{VERIFY_URL}}" target="_blank" class="verify-button">Verify Email</a>
         <p>If you did not request this, please ignore this email.</p>
         <div class="footer">© 2025 Techerudite. All rights reserved.</div>
     </div>
